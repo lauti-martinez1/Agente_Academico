@@ -1,0 +1,12 @@
+# API keys y variables de entorno — NUNCA subir a GitHub
+.env
+
+# Entorno virtual
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Base de datos local (Etapa 4)
+*.db
+historial.json
