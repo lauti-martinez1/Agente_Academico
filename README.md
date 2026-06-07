@@ -11,8 +11,8 @@
 
 ## Requisitos
 - Python 3.10 o superior
-- Cuenta en Anthropic (console.anthropic.com)
-- API key de Anthropic
+- Cuenta en Google AI Studio
+- API key de Gemini
 
 ## Instalación
 
@@ -28,7 +28,7 @@ venv\Scripts\activate
 source venv/bin/activate
 
 # 3. Instalar dependencias
-pip install anthropic
+pip install -r requirements.txt
 ```
 
 ## Configuración de la API key
