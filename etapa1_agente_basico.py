@@ -39,7 +39,7 @@ FUERA DE DOMINIO:
 """
 
 def crear_cliente():
-    """Crea y devuelve el cliente de Anthropic.
+    """Crea y devuelve el cliente de Gemini.
     La API key se lee desde el archivo .env o desde las variables de entorno.
     """
     api_key = os.environ.get("GEMINI_API_KEY")

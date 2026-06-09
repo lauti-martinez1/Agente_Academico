@@ -12,6 +12,8 @@ Qué agrega esta etapa sobre la Etapa 1:
 import os
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
+from google.api_core import exceptions
 
 # Carga las variables del archivo .env automáticamente
 load_dotenv()
@@ -28,30 +30,33 @@ MODEL = "gemini-3.1-flash-lite"
 #   5. Restricciones de seguridad/ética
 
 SYSTEM_PROMPT = """
-Sos Olivia, una asistente gastronómica virtual especializada en cocina mediterránea.
-Trabajás para un restaurante llamado "Mar Nostrum" en Mendoza, Argentina.
+Sos UniBot, un tutor académico inteligente especializado en orientar a estudiantes universitarios.
 
 PERSONALIDAD:
-- Respondés siempre en español, con un tono cálido, amigable y entusiasta
-- Usás lenguaje accesible, sin tecnicismos innecesarios
-- Cuando das una receta, la presentás de forma ordenada con ingredientes y pasos numerados
+- Respondés siempre en español. Tu tono es profesional, motivador, claro y paciente.
+- Usás lenguaje accesible acorde al nivel del usuario, sin usar tecnicismos innecesarios
+- Cuando das una respuesta, la presentás de forma ordenada
 
 DOMINIO:
-- Tu especialidad son las recetas mediterráneas, los ingredientes, las técnicas culinarias
-- También podés ayudar con maridajes de vinos y platos
+- Tu especialidad son la programacion, las matematicas y tecnologia en general
+- También podés ayudar con temas relacionados a otras areas de la ciencia como fisica y quimica
+- Generación de cuestionarios de repaso sobre temas indicados.
+- Organización de temas de estudio
 
 FUERA DE DOMINIO:
-- Si te preguntan algo que no tenga relación con gastronomía, cocina o alimentación,
-  respondés amablemente que tu especialidad es la cocina mediterránea y ofrecés
+- Tu objetivo es mantenerte 100% enfocado en el ámbito académico y universitario.
+- Si te preguntan algo que no tenga relación con lo academico,
+  respondés amablemente que tu especialidad es la educacion academica orientada a las ciencias y ofrecés
   redirigir la conversación a ese tema.
-- Ejemplo: si preguntan sobre política, matemáticas o tecnología, decís algo como:
-  "Eso está fuera de mi área, pero si querés te cuento sobre gastronomía mediterránea..."
+- Ejemplo: si preguntan sobre política, recetas o arte, decís algo como:
+  "Eso está fuera de mi área, pero si querés te cuento sobre los ultimos avances en inteligencia artificial..."
 
 RESTRICCIONES:
-- Nunca inventés ingredientes que puedan ser peligrosos para la salud
-- Si una persona menciona alergias, siempre advertís sobre los ingredientes relevantes
-- No dás consejos médicos aunque estén relacionados con la alimentación
+- Nunca inventés comandos o sintaxis inexistente en programacion, tampoco operaciones inexistentes en matemicas
+- Si una persona menciona dificultades para entender, das ejemplos ilustrativos
+- Si el usuario te pide ayuda para realizar actividades deshonestas, rechazá la solicitud firmemente pero con educación, explicando que tu propósito es fomentar el aprendizaje
 """
+
 
 # ── Comandos disponibles ───────────────────────────────────────
 COMANDOS = {
@@ -62,7 +67,7 @@ COMANDOS = {
 
 
 def crear_cliente():
-    """Crea el cliente de Anthropic con validación de API key.
+    """Crea el cliente de Gemini con validación de API key.
     La API key se lee desde el archivo .env o desde las variables de entorno.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -70,9 +75,9 @@ def crear_cliente():
         raise ValueError(
             "No se encontró GEMINI_API_KEY.\n"
             "Creá un archivo .env en esta carpeta con:\n"
-            "GEMINI_API_KEY=sk-ant-..."
+            "GEMINI_API_KEY=TU_API_KEY_DE_GEMINI"
         )
-    return anthropic.Anthropic(api_key=api_key)
+    return genai.Client(api_key=api_key)
 
 
 def obtener_respuesta(client, historial: list) -> str:
@@ -81,21 +86,23 @@ def obtener_respuesta(client, historial: list) -> str:
     Si la API falla, devuelve un mensaje de error amigable en lugar de cerrarse.
     """
     try:
-        respuesta = client.messages.create(
+        respuesta = client.models.generate_content(
             model=MODEL,
-            max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            messages=historial
+            contents=historial,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=1024
+            )
         )
-        return respuesta.content[0].text
+        return respuesta.text
 
-    except anthropic.APIConnectionError:
+    except exceptions.ServiceUnavailable:
         return "[Error de conexión] No pude conectarme al servidor. Verificá tu conexión a internet e intentá de nuevo."
 
-    except anthropic.RateLimitError:
+    except exceptions.ResourceExhausted:
         return "[Límite de uso] Se alcanzó el límite de solicitudes. Esperá unos segundos e intentá de nuevo."
 
-    except anthropic.APIStatusError as e:
+    except exceptions.GoogleAPICallError as e:
         return f"[Error de API {e.status_code}] Ocurrió un problema con el servicio. Intentá de nuevo en unos momentos."
 
     except Exception as e:
@@ -119,14 +126,15 @@ def main():
     historial = []
 
     # Saludo inicial del agente
-    print("\nOlivia: ¡Hola! Soy Olivia, tu asistente gastronómica especializada")
-    print("        en cocina mediterránea. ¿En qué puedo ayudarte hoy?")
+    print("\nUniBot: ¡Hola! Soy Unibot, tu asistente academico especializado")
+    print("        en programacion y matematicas. ¿En qué puedo ayudarte hoy?")
 
     while True:
         try:
             mensaje = input("\nVos: ").strip()
+
         except (EOFError, KeyboardInterrupt):
-            print("\nOlivia: ¡Hasta luego! Fue un placer ayudarte.")
+            print("\nUniBot: ¡Hasta luego! Fue un placer ayudarte.")
             break
 
         if not mensaje:
@@ -134,13 +142,13 @@ def main():
 
         # ── Manejo de comandos especiales ─────────────────────
         if mensaje.lower() == "/salir":
-            print("\nOlivia: ¡Hasta pronto! Que disfrutes cocinando. 🍋")
+            print("\nUniBot: ¡Hasta pronto! Segui aprendiendo.")
             break
 
         if mensaje.lower() == "/limpiar":
             historial = []
             print("\n[Sistema] Historial limpiado. Comenzamos de nuevo.")
-            print("Olivia: ¡Claro! Empecemos de cero. ¿Qué receta te interesa hoy?")
+            print("nUniBot: ¡Claro! Empecemos de cero. ¿Qué te interesa aprender hoy?")
             continue
 
         if mensaje.lower() == "/ayuda":
@@ -148,16 +156,28 @@ def main():
             continue
 
         # ── Conversación normal ────────────────────────────────
-        historial.append({"role": "user", "content": mensaje})
+        
+        historial.append(
+            types.Content(
+                role="user",
+                parts=[types.Part(text=mensaje)],
+            )
+        )
 
-        print("\nOlivia: ", end="", flush=True)
+        print("\nUniBot: ", end="", flush=True)
+        
         respuesta = obtener_respuesta(client, historial)
+
         print(respuesta)
 
         # Solo agregamos al historial si fue una respuesta real (no error de API)
         if not respuesta.startswith("[Error"):
-            historial.append({"role": "assistant", "content": respuesta})
-
+            historial.append(
+                types.Content(
+                    role="model",
+                    parts=[types.Part(text=respuesta)],
+                )
+            )
 
 if __name__ == "__main__":
     main()
