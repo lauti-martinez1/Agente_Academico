@@ -3,7 +3,7 @@ TP12 — Etapa 1: Agente conversacional básico
 Sistemas Inteligentes 2026
 
 Qué hace esta etapa:
-- Conecta a la API de Claude (Anthropic)
+- Conecta a la API de Gemini
 - Define la personalidad del agente con un system prompt
 - Mantiene el historial de mensajes para recordar el contexto
 - Loop de conversación por consola
