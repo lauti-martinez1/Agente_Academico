@@ -17,20 +17,18 @@ DOMINIO EJEMPLO: Asistente gastronómico con 3 herramientas:
 import os
 import json
 from dotenv import load_dotenv
-from google import genai
-
+import google.generativeai as genai
 # Carga las variables del archivo .env automáticamente
 load_dotenv()
 
 MODEL = "gemini-3.1-flash-lite"
 
 SYSTEM_PROMPT = """
-Sos Olivia, una asistente gastronómica especializada en cocina mediterránea.
-Respondés siempre en español, con tono cálido y profesional.
-Tu especialidad son las recetas mediterráneas, ingredientes y maridajes.
-Tenés acceso a herramientas para calcular porciones, obtener información
-sobre ingredientes y sugerir maridajes de vinos. Usalas cuando el usuario
-lo necesite sin que tengan que pedirlo explícitamente.
+Sos UniBot, un tutor académico inteligente especializado en orientar a estudiantes universitarios.
+Respondés siempre en español, con un tono profesional, claro y motivador.
+Tu especialidad son la programación, las matemáticas y la organización del estudio.
+Tenés acceso a herramientas externas para organizar planes de estudio y buscar informacion de otras fuentes confiables.
+ Usalas de forma autónoma cuando la consulta del usuario lo requiera, sin que tengan que pedírtelo explícitamente.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -38,70 +36,76 @@ lo necesite sin que tengan que pedirlo explícitamente.
 # Cada herramienta tiene: nombre, descripción y esquema de parámetros
 # El modelo lee estas definiciones para saber cuándo y cómo usarlas
 # ══════════════════════════════════════════════════════════════
-
 TOOLS = [
     {
-        "name": "calcular_porciones",
+        "name": "organizar_plan_estudio",
         "description": (
-            "Ajusta las cantidades de una receta para una cantidad diferente de personas. "
-            "Útil cuando el usuario quiere adaptar una receta para más o menos comensales."
+            "Organiza una lista de temas de estudio distribuyéndolos equitativamente en los días disponibles. "
+            "Útil cuando el alumno necesita planificar su tiempo de estudio antes de un examen."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "ingredientes": {
+                "temas": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Lista de ingredientes con cantidades, ej: ['200g harina', '2 huevos']"
+                    "description": "Lista de temas académicos a estudiar, ej: ['Polimorfismo', 'Herencia', 'Abstracción']"
                 },
-                "porciones_original": {
+                "dias_disponibles": {
                     "type": "integer",
-                    "description": "Cantidad de personas para las que estaba pensada la receta original"
-                },
-                "porciones_nueva": {
-                    "type": "integer",
-                    "description": "Cantidad de personas para las que se quiere adaptar"
+                    "description": "Cantidad de días que el usuario tiene disponibles para estudiar los temas"
                 }
             },
-            "required": ["ingredientes", "porciones_original", "porciones_nueva"]
+            "required": ["temas", "dias_disponibles"]
         }
     },
     {
-        "name": "buscar_info_ingrediente",
+        "name": "generar_cuestionario",
         "description": (
-            "Devuelve información nutricional y culinaria básica sobre un ingrediente. "
-            "Usar cuando el usuario pregunta sobre propiedades, usos o sustitutos de un ingrediente."
+            "Genera parámetros para buscar o crear un cuestionario de repaso sobre un tema específico. "
+            "Usar cuando el usuario pide practicar, ponerse a prueba o repasar un concepto."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "ingrediente": {
+                "tema": {
                     "type": "string",
-                    "description": "Nombre del ingrediente a consultar, ej: 'aceite de oliva'"
+                    "description": "El tema académico a evaluar, ej: 'Leyes de Newton' o 'Bucles en Java'"
+                },
+                "dificultad": {
+                    "type": "string",
+                    "description": "Nivel de dificultad del cuestionario, ej: 'básico', 'intermedio', 'avanzado'"
+                },
+                "cantidad_preguntas": {
+                    "type": "integer",
+                    "description": "Número total de preguntas que debe tener el cuestionario"
                 }
             },
-            "required": ["ingrediente"]
+            "required": ["tema", "dificultad", "cantidad_preguntas"]
         }
     },
     {
-        "name": "sugerir_maridaje",
+        "name": "verificar_sintaxis",
         "description": (
-            "Sugiere vinos o bebidas que maridan bien con un plato específico. "
-            "Usar cuando el usuario pregunta qué vino tomar con una comida."
+            "Verifica la existencia y sintaxis correcta de un concepto o comando de programación. "
+            "Usar SIEMPRE antes de dar ejemplos de código para evitar inventar sintaxis inexistente."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "plato": {
+                "lenguaje": {
                     "type": "string",
-                    "description": "Nombre del plato para el que se busca maridaje, ej: 'paella de mariscos'"
+                    "description": "Lenguaje de programación a consultar, ej: 'Java', 'Python', 'C++'"
+                },
+                "concepto": {
+                    "type": "string",
+                    "description": "El concepto, función o comando a buscar, ej: 'System.out.println', 'list comprehension'"
                 }
             },
-            "required": ["plato"]
+            "required": ["lenguaje", "concepto"]
         }
     }
 ]
-
 
 # ══════════════════════════════════════════════════════════════
 # IMPLEMENTACIÓN DE LAS HERRAMIENTAS
@@ -109,264 +113,238 @@ TOOLS = [
 # decide invocar una herramienta. Pueden hacer cálculos, llamar
 # APIs externas, consultar bases de datos, etc.
 # ══════════════════════════════════════════════════════════════
-
-def calcular_porciones(ingredientes: list, porciones_original: int, porciones_nueva: int) -> dict:
+def organizar_plan_estudio(temas: list, dias_disponibles: int) -> dict:
     """
-    Ajusta proporciones de una receta.
-    En un caso real, esto podría parsear unidades de medida más sofisticadas.
+    Organiza una lista de temas distribuyéndolos en los días disponibles.
+    En un caso real, esto podría integrarse con Google Calendar o Notion.
     """
-    factor = porciones_nueva / porciones_original
-    ingredientes_ajustados = []
+    if dias_disponibles <= 0:
+        return {"error": "La cantidad de días debe ser mayor a 0."}
 
-    for ing in ingredientes:
-        # Intentar multiplicar números en el ingrediente
-        partes = ing.split()
-        nueva_linea = []
-        for parte in partes:
-            try:
-                numero = float(parte.replace(',', '.'))
-                nueva_linea.append(str(round(numero * factor, 1)))
-            except ValueError:
-                nueva_linea.append(parte)
-        ingredientes_ajustados.append(" ".join(nueva_linea))
+    total_temas = len(temas)
+    temas_por_dia = total_temas // dias_disponibles
+    sobrante = total_temas % dias_disponibles
+
+    plan = {}
+    indice_tema = 0
+
+    for dia in range(1, dias_disponibles + 1):
+        cantidad_hoy = temas_por_dia + (1 if dia <= sobrante else 0)
+        plan[f"Dia {dia}"] = temas[indice_tema : indice_tema + cantidad_hoy]
+        indice_tema += cantidad_hoy
 
     return {
-        "porciones_original": porciones_original,
-        "porciones_nueva": porciones_nueva,
-        "factor": round(factor, 2),
-        "ingredientes_ajustados": ingredientes_ajustados
+        "dias_disponibles": dias_disponibles,
+        "total_temas": total_temas,
+        "temas_por_dia_promedio": temas_por_dia,
+        "plan_detallado": plan
     }
 
 
-def buscar_info_ingrediente(ingrediente: str) -> dict:
+def generar_cuestionario(tema: str, dificultad: str, cantidad_preguntas: int) -> dict:
     """
-    Base de datos de ingredientes (simulada).
-    En un caso real, esto podría llamar a una API de nutrición.
+    Simula la búsqueda de contexto duro para generar un cuestionario.
+    En la vida real, acá harías un RAG (buscar en los PDFs de la materia).
+    """
+    base_conocimiento = {
+        "polimorfismo": "Permite que objetos de diferentes clases respondan al mismo método o mensaje.",
+        "herencia": "Mecanismo por el cual una clase deriva de otra, heredando sus atributos y métodos.",
+        "bucles": "Estructuras (for, while) que permiten repetir bloques de código hasta cumplir una condición.",
+        "derivadas": "Representa la tasa de cambio instantánea de una función."
+    }
+
+    tema_lower = tema.lower()
+    contexto_encontrado = "No hay contexto duro en la base de datos. Basar las preguntas en conocimiento general validado."
+
+    for key, value in base_conocimiento.items():
+        if key in tema_lower or tema_lower in key:
+            contexto_encontrado = value
+            break
+
+    return {
+        "tema_solicitado": tema,
+        "dificultad": dificultad,
+        "cantidad_preguntas": cantidad_preguntas,
+        "contexto_extraido": contexto_encontrado,
+        "instruccion_oculta": f"Redacta {cantidad_preguntas} preguntas ({dificultad}) sobre {tema}. Usa el contexto provisto de ser posible."
+    }
+
+
+def verificar_sintaxis(lenguaje: str, concepto: str) -> dict:
+    """
+    Valida la sintaxis en una base de datos estricta para cumplir la regla
+    del System Prompt: nunca inventar comandos.
     """
     base_datos = {
-        "aceite de oliva": {
-            "tipo": "grasa vegetal",
-            "origen": "Mediterráneo",
-            "usos": "Cocinar, aliñar, conservar",
-            "temperatura_coccion": "Hasta 180°C (virgen extra), 210°C (refinado)",
-            "beneficios": "Rico en grasas monoinsaturadas y antioxidantes",
-            "sustituto": "Aceite de girasol o manteca para cocinar"
+        "python": {
+            "for": "for elemento in iterable:",
+            "print": "print('Hola Mundo')",
+            "list comprehension": "[x for x in lista if condicion]"
         },
-        "tomate": {
-            "tipo": "fruta/hortaliza",
-            "origen": "América del Sur",
-            "usos": "Salsas, ensaladas, sopas",
-            "temporada": "Verano (mejor sabor)",
-            "beneficios": "Licopeno, vitamina C",
-            "sustituto": "Tomates enlatados fuera de temporada"
-        },
-        "ajo": {
-            "tipo": "bulbo",
-            "origen": "Asia Central",
-            "usos": "Aromatizar, base de salsas",
-            "intensidad": "Crudo es más fuerte, cocido más suave",
-            "beneficios": "Propiedades antimicrobianas, alicina",
-            "sustituto": "Ajo en polvo (1/4 cucharadita por diente)"
-        },
+        "java": {
+            "print": "System.out.println('Hola Mundo');",
+            "for": "for (int i = 0; i < limite; i++) { }",
+            "clase": "public class NombreClase { }"
+        }
     }
 
-    ing_lower = ingrediente.lower()
-    for key in base_datos:
-        if key in ing_lower or ing_lower in key:
-            return {"encontrado": True, "ingrediente": key, "info": base_datos[key]}
+    lenguaje_lower = lenguaje.lower()
+    concepto_lower = concepto.lower()
+
+    if lenguaje_lower in base_datos:
+        for key, sintaxis in base_datos[lenguaje_lower].items():
+            if key in concepto_lower or concepto_lower in key:
+                return {
+                    "encontrado": True,
+                    "lenguaje": lenguaje,
+                    "concepto_buscado": concepto,
+                    "sintaxis_oficial": sintaxis,
+                    "estado": "Aprobado para usar en la respuesta."
+                }
 
     return {
         "encontrado": False,
-        "ingrediente": ingrediente,
-        "mensaje": f"No tengo información específica sobre '{ingrediente}' en mi base de datos, pero puedo ayudarte con otros ingredientes mediterráneos."
+        "lenguaje": lenguaje,
+        "concepto_buscado": concepto,
+        "estado": "Rechazado",
+        "mensaje_al_modelo": f"No se encontró sintaxis verificada para '{concepto}' en {lenguaje}. Informale al alumno que no tenés el dato exacto para no inventar."
     }
-
-
-def sugerir_maridaje(plato: str) -> dict:
-    """
-    Sugerencias de maridaje según el tipo de plato.
-    En un caso real, podría integrarse con una API de vinos.
-    """
-    plato_lower = plato.lower()
-
-    if any(p in plato_lower for p in ["mariscos", "pescado", "pulpo", "calamar"]):
-        return {
-            "plato": plato,
-            "vinos_blancos": ["Albariño", "Verdejo", "Chardonnay sin roble"],
-            "vinos_rosados": ["Rosado de Provence"],
-            "temperatura": "8-10°C",
-            "nota": "Los vinos blancos secos y frescos equilibran la salinidad del mar"
-        }
-    elif any(p in plato_lower for p in ["carne", "cordero", "ternera", "pollo"]):
-        return {
-            "plato": plato,
-            "vinos_tintos": ["Malbec", "Tempranillo", "Sangiovese"],
-            "vinos_blancos": ["Chardonnay con roble (para pollo)"],
-            "temperatura": "16-18°C",
-            "nota": "Tintos con cuerpo para carnes rojas, blancos para aves"
-        }
-    elif any(p in plato_lower for p in ["pasta", "risotto", "pizza"]):
-        return {
-            "plato": plato,
-            "vinos_tintos": ["Chianti", "Barbera", "Montepulciano"],
-            "vinos_blancos": ["Pinot Grigio", "Soave"],
-            "temperatura": "Tintos 16°C, blancos 10°C",
-            "nota": "Los vinos italianos son los compañeros naturales de la pasta"
-        }
-    else:
-        return {
-            "plato": plato,
-            "recomendacion_general": "Rosado versátil o blanco seco",
-            "vinos": ["Rosado Malbec", "Sauvignon Blanc", "Torrontés"],
-            "nota": "Para platos mediterráneos en general, un blanco fresco o rosado seco es una buena elección segura"
-        }
-
 
 # ══════════════════════════════════════════════════════════════
 # MOTOR DE EJECUCIÓN DE HERRAMIENTAS
 # ══════════════════════════════════════════════════════════════
+TOOLS_MAP = {
+    "organizar_plan_estudio": organizar_plan_estudio,
+    "generar_cuestionario": generar_cuestionario,
+    "verificar_sintaxis": verificar_sintaxis,
+}
 
-def ejecutar_herramienta(nombre: str, parametros: dict) -> str:
-    """
-    Despacha la llamada a la función correcta y devuelve el resultado como JSON.
-    Este es el 'router' de herramientas.
-    """
-    if nombre == "calcular_porciones":
-        resultado = calcular_porciones(**parametros)
-    elif nombre == "buscar_info_ingrediente":
-        resultado = buscar_info_ingrediente(**parametros)
-    elif nombre == "sugerir_maridaje":
-        resultado = sugerir_maridaje(**parametros)
-    else:
-        resultado = {"error": f"Herramienta '{nombre}' no reconocida"}
+def ejecutar_herramienta(nombre: str, parametros: dict) -> dict:
+    # Gemini devuelve enteros como float (2.0 → 2)
+    parametros = {
+        k: int(v) if isinstance(v, float) and v.is_integer() else v
+        for k, v in parametros.items()
+    }
+    # Gemini devuelve listas como MapComposite/RepeatedComposite, hay que convertirlas
+    parametros = {
+        k: list(v) if hasattr(v, '__iter__') and not isinstance(v, str) and not isinstance(v, dict) else v
+        for k, v in parametros.items()
+    }
 
-    return json.dumps(resultado, ensure_ascii=False, indent=2)
+    if nombre in TOOLS_MAP:
+        return TOOLS_MAP[nombre](**parametros)
+    return {"error": f"Herramienta '{nombre}' no reconocida"}
 
+def procesar_respuesta(chat, mensaje: str) -> str:
+    """
+    Manejo de Function Calling para Gemini.
+    1. Manda el mensaje al chat.
+    2. Mientras el modelo devuelva function_calls, los ejecuta y devuelve resultados.
+    3. Retorna el texto final cuando el modelo no pide más herramientas.
+    """
+    respuesta = chat.send_message(mensaje)
 
-def procesar_respuesta(client, historial: list) -> str:
-    """
-    Ciclo completo de procesamiento:
-    1. Llama a la API con las herramientas disponibles
-    2. Si el modelo quiere usar una herramienta, la ejecuta
-    3. Devuelve el resultado al modelo para que genere la respuesta final
-    4. Repite hasta que el modelo devuelve texto normal (stop_reason == "end_turn")
-    """
+    # Gemini puede pedir múltiples herramientas en una sola respuesta
     while True:
-        respuesta = client.messages.create(
-            model=MODEL,
-            max_tokens=2048,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=historial
-        )
+        # Recolectamos todos los function_calls del turno actual
+        llamadas = []
+        for parte in respuesta.candidates[0].content.parts:
+            if parte.function_call.name:  # si tiene nombre, es un function_call real
+                llamadas.append(parte.function_call)
 
-        # Si el modelo terminó normalmente, devolver el texto
-        if respuesta.stop_reason == "end_turn":
-            for bloque in respuesta.content:
-                if hasattr(bloque, 'text'):
-                    return bloque.text
-            return "[Sin respuesta]"
+        if not llamadas:
+            break  # No hay más herramientas — salimos del loop
 
-        # Si el modelo quiere usar herramientas
-        if respuesta.stop_reason == "tool_use":
-            # Agregar la respuesta del asistente al historial
-            historial.append({
-                "role": "assistant",
-                "content": respuesta.content
-            })
+        # Ejecutamos cada herramienta y armamos las respuestas
+        partes_respuesta = []
+        for fc in llamadas:
+            nombre = fc.name
+            parametros = dict(fc.args)
+            print(f"\n[⚙️  UniBot ejecutando: {nombre}]")
 
-            # Ejecutar todas las herramientas solicitadas
-            resultados_tools = []
-            for bloque in respuesta.content:
-                if bloque.type == "tool_use":
-                    print(f"\n[🔧 Usando herramienta: {bloque.name}]")
-                    resultado = ejecutar_herramienta(bloque.name, bloque.input)
-                    resultados_tools.append({
-                        "type": "tool_result",
-                        "tool_use_id": bloque.id,
-                        "content": resultado
-                    })
+            resultado = ejecutar_herramienta(nombre, parametros)
 
-            # Agregar los resultados al historial y hacer otra llamada
-            historial.append({
-                "role": "user",
-                "content": resultados_tools
-            })
-            # El while continúa — el modelo procesa los resultados y genera respuesta final
+            partes_respuesta.append(
+                genai.protos.Part(
+                    function_response=genai.protos.FunctionResponse(
+                        name=nombre,
+                        response={"resultado": json.dumps(resultado, ensure_ascii=False)}
+                    )
+                )
+            )
 
-        else:
-            # stop_reason inesperado
-            return f"[Respuesta inesperada del modelo: {respuesta.stop_reason}]"
+        # Devolvemos todos los resultados al modelo de una sola vez
+        respuesta = chat.send_message(partes_respuesta)
 
+    return respuesta.text
 
 # ══════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════
 
-def crear_cliente():
-    """La API key se lee desde el archivo .env o desde las variables de entorno."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "No se encontró GEMINI_API_KEY.\n"
-            "Creá un archivo .env en esta carpeta con:\n"
-            "GEMINI_API_KEY=sk-ant-..."
-        )
-    return anthropic.Anthropic(api_key=api_key)
-
-
 def main():
-    print("=" * 60)
+    print("=" * 70)
     print("  Agente IA — Etapa 3: Herramientas (Function Calling)")
     print("  Comandos: /salir, /limpiar, /ayuda")
-    print("  Herramientas: calcular porciones, info ingrediente, maridaje")
-    print("=" * 60)
+    print("  Herramientas: organizar plan, generar cuestionario, verificar sintaxis")
+    print("=" * 70)
 
-    client = crear_cliente()
-    historial = []
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("No se encontró GEMINI_API_KEY en las variables de entorno.")
+    
+    # Inicializamos el modelo de Google
+    genai.configure(api_key=api_key)
 
-    print("\nOlivia: ¡Hola! Soy Olivia. Puedo ayudarte con recetas, calcular")
-    print("        porciones, darte info de ingredientes y sugerir maridajes.")
-    print("        ¿Por dónde empezamos?")
+    modelo = genai.GenerativeModel(
+        model_name=MODEL,
+        system_instruction=SYSTEM_PROMPT,
+        tools=[organizar_plan_estudio, generar_cuestionario, verificar_sintaxis]
+    )
+
+    
+    # Arrancamos una sesión de chat (esto ya maneja el historial internamente)
+    chat = modelo.start_chat()
+
+    print("\nUniBot: ¡Hola! Soy UniBot, tu tutor académico. Puedo ayudarte a organizar")
+    print("        tus temas de estudio, armar cuestionarios de repaso y validar")
+    print("        sintaxis de programación. ¿Por dónde empezamos hoy?")
 
     while True:
         try:
             mensaje = input("\nVos: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\nOlivia: ¡Hasta luego!")
+            print("\nUniBot: ¡Éxitos con el estudio! Nos vemos la próxima.")
             break
 
         if not mensaje:
             continue
 
         if mensaje.lower() == "/salir":
-            print("\nOlivia: ¡Hasta pronto! Que disfrutes cocinando. 🍋")
+            print("\nUniBot: ¡Hasta pronto! Que rindas excelente. 📚")
             break
 
         if mensaje.lower() == "/limpiar":
-            historial = []
+            # Para limpiar el historial en Gemini, simplemente creamos un chat nuevo
+            chat = modelo.start_chat()
             print("\n[Sistema] Historial limpiado.")
             continue
 
         if mensaje.lower() == "/ayuda":
-            print("\n📋 Herramientas disponibles:")
-            print("  • Calculá porciones: 'adaptá esta receta para 8 personas'")
-            print("  • Info de ingrediente: '¿qué es el za'atar?'")
-            print("  • Maridaje: '¿qué vino va bien con paella?'")
+            print("\n📋 Herramientas disponibles (se activan solas según tu consulta):")
+            print("  • Organizar estudio: 'Tengo 4 días para estudiar herencia y polimorfismo'")
+            print("  • Cuestionarios: 'Armame 5 preguntas difíciles sobre bucles en Java'")
+            print("  • Validar código: '¿Cómo se hace un for en Python?'")
             continue
 
-        historial.append({"role": "user", "content": mensaje})
-
         try:
-            print("\nOlivia: ", end="", flush=True)
-            respuesta = procesar_respuesta(client, historial)
-            print(respuesta)
-            historial.append({"role": "assistant", "content": respuesta})
+            print("\nUniBot: ", end="", flush=True)
+            # Pasamos el objeto 'chat' en lugar de un 'historial' de lista
+            texto_final = procesar_respuesta(chat, mensaje)
+            print(texto_final)
 
-        except anthropic.APIError as e:
-            print(f"\n[Error de API] {e}")
         except Exception as e:
-            print(f"\n[Error] {e}")
+            print(f"\n[Error de la API] {e}")
 
 
 if __name__ == "__main__":
