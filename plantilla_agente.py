@@ -19,6 +19,8 @@ Instrucciones:
 """
 
 import os
+import json
+from datetime import datetime
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -29,6 +31,7 @@ load_dotenv()
 
 # ── Configuración ──────────────────────────────────────────────
 MODEL = "gemini-3.1-flash-lite"  # No cambiar sin justificación
+ARCHIVO_HISTORIAL = "historial.json"  # Etapa 4: archivo de persistencia
 
 # ── [COMPLETAR] System prompt del agente ─────────────────────
 # Definir:
@@ -400,22 +403,114 @@ def ejecutar_herramienta(nombre: str, parametros: dict) -> str:
 # ETAPA 4 — Persistencia (agregar sobre Etapa 3)
 # ══════════════════════════════════════════════════════════════
 
-def guardar_historial(historial: list, archivo: str = "historial.json"):
+def guardar_historial(historial: list, archivo: str = ARCHIVO_HISTORIAL):
     """
-    [COMPLETAR Etapa 4 - Opción A]: guardar el historial en un archivo JSON.
+    Guarda la sesión actual al archivo JSON de persistencia.
+    Si el archivo ya existe, agrega la nueva sesión a la lista existente.
+    Solo guarda si la sesión tiene al menos un mensaje del usuario.
     """
-    # import json
-    # from datetime import datetime
-    # [COMPLETAR]: guardar historial con fecha/hora
-    pass
+    # Convertir el historial de types.Content a formato serializable
+    mensajes_serializables = []
+    for content in historial:
+        # Solo guardamos mensajes de usuario y modelo (no function calls intermedios)
+        if hasattr(content, "role") and hasattr(content, "parts"):
+            for part in content.parts:
+                if hasattr(part, "text") and part.text:
+                    mensajes_serializables.append({
+                        "role": content.role,
+                        "text": part.text
+                    })
+
+    # No guardar sesiones vacías
+    if not mensajes_serializables:
+        return
+
+    # Cargar sesiones anteriores si el archivo existe
+    sesiones = []
+    if os.path.exists(archivo):
+        try:
+            with open(archivo, "r", encoding="utf-8") as f:
+                sesiones = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            sesiones = []
+
+    # Agregar la nueva sesión con id y fecha
+    nueva_sesion = {
+        "id": len(sesiones) + 1,
+        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "mensajes": mensajes_serializables
+    }
+    sesiones.append(nueva_sesion)
+
+    # Guardar todo de vuelta al archivo
+    with open(archivo, "w", encoding="utf-8") as f:
+        json.dump(sesiones, f, ensure_ascii=False, indent=2)
+
+    print(f"\n[Sistema] Sesión guardada ({nueva_sesion['fecha']}).")
 
 
-def cargar_historial(archivo: str = "historial.json") -> list:
+def cargar_historial(archivo: str = ARCHIVO_HISTORIAL) -> list:
     """
-    [COMPLETAR Etapa 4 - Opción A]: cargar el historial desde un archivo JSON.
-    Devuelve lista vacía si el archivo no existe.
+    Carga el archivo JSON y devuelve la lista de sesiones anteriores.
+    Devuelve lista vacía si el archivo no existe o está corrupto.
     """
-    # [COMPLETAR]: cargar y devolver historial
+    if not os.path.exists(archivo):
+        return []
+    try:
+        with open(archivo, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return []
+
+
+def mostrar_sesiones_anteriores(sesiones: list):
+    """
+    Muestra un resumen de las sesiones guardadas al usuario.
+    """
+    if not sesiones:
+        print("\n[Sistema] No hay conversaciones anteriores guardadas.")
+        return
+
+    print("\n📂 Conversaciones anteriores:")
+    for sesion in sesiones:
+        # Contar solo mensajes del usuario para el resumen
+        msgs_usuario = [m for m in sesion["mensajes"] if m["role"] == "user"]
+        cantidad = len(msgs_usuario)
+        # Mostrar el primer mensaje del usuario como preview
+        preview = msgs_usuario[0]["text"][:60] + "..." if msgs_usuario else "(vacía)"
+        print(f"  [{sesion['id']}] {sesion['fecha']} — {cantidad} mensaje(s) — \"{preview}\"")
+
+
+def retomar_sesion(sesiones: list, id_sesion: int) -> list:
+    """
+    Convierte los mensajes de una sesión guardada de vuelta
+    al formato types.Content que usa Gemini.
+    Muestra los últimos 4 mensajes como contexto visual.
+    Devuelve lista vacía si el id no existe.
+    """
+    for sesion in sesiones:
+        if sesion["id"] == id_sesion:
+            historial = []
+            for mensaje in sesion["mensajes"]:
+                historial.append(
+                    types.Content(
+                        role=mensaje["role"],
+                        parts=[types.Part(text=mensaje["text"])]
+                    )
+                )
+            print(f"\n[Sistema] Retomando conversación del {sesion['fecha']}.")
+
+            # Mostrar los últimos mensajes para que el usuario recuerde el contexto
+            ultimos = sesion["mensajes"][-4:]
+            print("\n--- Últimos mensajes de esta conversación ---")
+            for m in ultimos:
+                quien = "Vos" if m["role"] == "user" else "UniBot"
+                texto = m["text"][:120] + "..." if len(m["text"]) > 120 else m["text"]
+                print(f"  {quien}: {texto}")
+            print("---------------------------------------------")
+
+            return historial
+    print(f"\n[Sistema] No se encontró la conversación con id {id_sesion}.")
     return []
 
 
@@ -433,6 +528,18 @@ def main():
     client = crear_cliente()
     historial = []
 
+    # Etapa 4: mostrar sesiones anteriores al iniciar
+    sesiones_anteriores = cargar_historial()
+    if sesiones_anteriores:
+        mostrar_sesiones_anteriores(sesiones_anteriores)
+        print("\n¿Querés retomar alguna conversación? Escribí su número o Enter para empezar de cero.")
+        try:
+            opcion = input("Opción: ").strip()
+            if opcion.isdigit():
+                historial = retomar_sesion(sesiones_anteriores, int(opcion))
+        except (EOFError, KeyboardInterrupt):
+            pass
+
     # [COMPLETAR]: saludo inicial del agente
     print("\nUniBot: ¡Hola! Soy UniBot, tu tutor académico. Puedo ayudarte a organizar")
     print("        tus temas de estudio, armar cuestionarios de repaso y validar")
@@ -442,6 +549,7 @@ def main():
         try:
             mensaje = input("\nVos: ").strip()
         except (EOFError, KeyboardInterrupt):
+            guardar_historial(historial)  # Etapa 4: guardar al salir
             print("\nUniBot: ¡Hasta luego! Fue un placer ayudarte.")
             break
 
@@ -461,11 +569,12 @@ def main():
 
 
         if mensaje.lower() == "/salir":
+            guardar_historial(historial)  # Etapa 4: guardar al salir
             print("\nUniBot: ¡Hasta pronto! Segui aprendiendo. 📚")
             break
  
         if mensaje.lower() == "/limpiar":
-            # Para limpiar el historial en Gemini, simplemente creamos un chat nuevo
+            guardar_historial(historial)  # Etapa 4: guardar al salir
             historial = []
             print("\n[Sistema] Historial limpiado. Comenzamos de nuevo.")
             print("\nUniBot: ¡Claro! Empecemos de cero. ¿Qué te interesa aprender hoy?")
@@ -477,6 +586,24 @@ def main():
             print("  • Organizar estudio: 'Tengo 4 días para estudiar herencia y polimorfismo'")
             print("  • Cuestionarios: 'Armame 5 preguntas difíciles sobre bucles en Java'")
             print("  • Validar código: '¿Cómo se hace un for en Python?'")
+            continue
+
+
+        # Etapa 4: comando para ver y retomar conversaciones anteriores
+        if mensaje.lower() == "/historial":
+            sesiones = cargar_historial()
+            mostrar_sesiones_anteriores(sesiones)
+            if sesiones:
+                print("\n¿Querés retomar alguna? Escribí su número o Enter para continuar la actual.")
+                try:
+                    opcion = input("Opción: ").strip()
+                    if opcion.isdigit():
+                        nueva = retomar_sesion(sesiones, int(opcion))
+                        if nueva:
+                            guardar_historial(historial)  # guardar la sesión actual antes de cambiar
+                            historial = nueva
+                except (EOFError, KeyboardInterrupt):
+                    pass
             continue
 
 
