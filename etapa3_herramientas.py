@@ -150,7 +150,10 @@ def generar_cuestionario(tema: str, dificultad: str, cantidad_preguntas: int) ->
         "polimorfismo": "Permite que objetos de diferentes clases respondan al mismo método o mensaje.",
         "herencia": "Mecanismo por el cual una clase deriva de otra, heredando sus atributos y métodos.",
         "bucles": "Estructuras (for, while) que permiten repetir bloques de código hasta cumplir una condición.",
-        "derivadas": "Representa la tasa de cambio instantánea de una función."
+        "derivadas": "Representa la tasa de cambio instantánea de una función.",
+        "integrales": "Operación inversa a la derivada; calcula el área bajo una curva.",
+        "matrices": "Arreglos rectangulares de números usados para representar transformaciones lineales.",
+        "vectores": "Objetos matemáticos con magnitud y dirección, representados como listas de componentes.",
     }
 
     tema_lower = tema.lower()

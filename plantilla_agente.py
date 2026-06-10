@@ -361,7 +361,7 @@ def verificar_sintaxis(lenguaje: str, concepto: str) -> dict:
         "lenguaje": lenguaje,
         "concepto_buscado": concepto,
         "estado": "Rechazado",
-        "mensaje_al_modelo": f"No se encontró sintaxis verificada para '{concepto}' en {lenguaje}. Informale al alumno que no tenés el dato exacto para no inventar."
+        "mensaje_al_modelo": f"No se encontró sintaxis verificada para '{concepto}' en {lenguaje}. Respondé usando tu conocimiento general sobre {lenguaje}, pero aclarále al alumno que la información proviene de tu conocimiento general y no de la base verificada."
     }
 
 
