@@ -7,7 +7,7 @@
 - Julian Fermentini
 
 ## Dominio
-[COMPLETAR: describir el dominio y el nombre del agente]
+Asistente academico - nombre: UniBot
 
 ## Requisitos
 - Python 3.10 o superior
@@ -35,12 +35,12 @@ pip install -r requirements.txt
 
 **Windows (PowerShell):**
 ```powershell
-$env:GEMINI_API_KEY = "sk-ant-..."
+$env:GEMINI_API_KEY = "TU_API_KEY_DE_GEMINI"
 ```
 
 **Mac/Linux:**
 ```bash
-export GEMINI_API_KEY="sk-ant-..."
+export GEMINI_API_KEY="TU_API_KEY_DE_GEMINI"
 ```
 
 > ⚠️ Nunca escribir la API key directamente en el código.
@@ -65,6 +65,7 @@ python plantilla_agente.py
 - `/salir` — Termina la conversación
 - `/limpiar` — Reinicia el historial
 - `/ayuda` — Muestra los comandos disponibles
+- `/historial` — Muestra las sesiones guardadas
 
 ## Estructura del proyecto
 ```
@@ -79,12 +80,22 @@ tp12_agente/
 
 ## Etapas implementadas
 - [x] Etapa 1 — Agente conversacional básico
-- [ ] Etapa 2 — Personalidad y robustez
-- [ ] Etapa 3 — Herramientas (Function Calling)
-- [ ] Etapa 4 — Persistencia
+- [x] Etapa 2 — Personalidad y robustez
+- [x] Etapa 3 — Herramientas (Function Calling)
+- [x] Etapa 4 — Persistencia
 
 ## Decisiones de diseño
-[COMPLETAR: describir las decisiones más importantes que tomaron]
+----Elección de Gemini en lugar de Claude----
+El TP sugería la API de Anthropic, pero el grupo optó por la API de Gemini (Google) ya que ofrece una capa gratuita accesible sin tarjeta de crédito, lo que facilitó el desarrollo y las pruebas. Los conceptos aplicados (system prompt, historial de mensajes, function calling) son equivalentes en ambas APIs.
+
+----Historial con types.Content en lugar de diccionarios planos----
+La API de Gemini requiere que el historial use objetos types.Content con role y parts, a diferencia del formato {"role": "user", "content": "..."} que usa Claude.
+
+----Tres herramientas coherentes con el dominio académico----
+Se implementaron las herramientas organizar_plan_estudio, generar_cuestionario y verificar_sintaxis por considerarlas relevantes para un asistente academico.
+
+----Persistencia en JSON plano----
+Para la Etapa 4 (Opcion A) se eligió JSON sobre SQLite por simplicidad: no requiere dependencias adicionales ni conocimiento de SQL. El archivo historial.json acumula sesiones con id, fecha y mensajes, permitiendo retomar cualquier conversación anterior desde el arranque del programa.
 
 ## Dificultades encontradas
-[COMPLETAR: qué salió mal y cómo lo resolvieron]
+Adaptar el codigo inicial de claude a gemini, teniendo que modificar algunas secciones.
